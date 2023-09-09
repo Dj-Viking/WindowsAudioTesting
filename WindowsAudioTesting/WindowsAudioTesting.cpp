@@ -35,7 +35,11 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     // You need to call CoInitialize prior to using it.
     HRESULT hr = 0;
 
-    CoInitialize(NULL);
+    hr = CoInitialize(NULL);
+    if (hr != S_OK) {
+        OutputDebugStringA("Could not coInitialize");
+        return 1;
+    }
 
     IMMDeviceEnumerator *pEnumerator = 0;
     IMMDeviceCollection *p_mmDeviceCollection = 0;
