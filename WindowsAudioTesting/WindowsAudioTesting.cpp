@@ -31,7 +31,9 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     // You need to call CoInitialize prior to using it.
 
     CoInitialize(NULL);
+
     void* pEnumerator = 0;
+    void* pInterface = 0;
 
     const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
     const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
