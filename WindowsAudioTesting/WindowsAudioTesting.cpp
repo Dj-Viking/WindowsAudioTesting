@@ -5,6 +5,10 @@
 #include "WindowsAudioTesting.h"
 #include "mmdeviceapi.h"
 
+#define SAFE_RELEASE(punk)  \
+	if ((punk) != NULL)  \
+{ (punk)->Release(); (punk) = NULL; }
+
 
 #define MAX_LOADSTRING 100
 
@@ -29,19 +33,34 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
 
     // Your COM dll requires you to be in Single - Threaded Apartment mode.
     // You need to call CoInitialize prior to using it.
+    HRESULT hr = 0;
 
     CoInitialize(NULL);
 
-    void* pEnumerator = 0;
-    void* pInterface = 0;
+    IMMDeviceEnumerator *pEnumerator = 0;
+    IMMDeviceCollection *p_mmDeviceCollection = 0;
 
-    const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
+    const CLSID CLSID_MMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
     const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
-    HRESULT hr = CoCreateInstance(
+
+    hr = CoCreateInstance(
         CLSID_MMDeviceEnumerator, NULL,
         CLSCTX_ALL, IID_IMMDeviceEnumerator,
+        // pointer to the device enumerator that we want to create
         (void**)&pEnumerator
     );
+
+    if (hr != S_OK) {
+        SAFE_RELEASE(pEnumerator);
+        return 1;
+    }
+
+    IMMDevice *pp_mmDevice = 0;
+
+    pEnumerator->EnumAudioEndpoints(
+        eAll,
+        DEVICE_STATE_ACTIVE,
+        &p_mmDeviceCollection);
 
     // Initialize global strings
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
