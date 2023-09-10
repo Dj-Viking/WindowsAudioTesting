@@ -95,15 +95,16 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     }
      
     hr = pEnumerator->EnumAudioEndpoints(
-        eAll,
-        DEVICE_STATE_ACTIVE,
-        &p_mmDeviceCollection
+        eAll, // get all input and output devices [in]
+        DEVICE_STATE_ACTIVE, // get all devices whose state is active [in]
+        &p_mmDeviceCollection // pass pointer to device collection struct [out]
     );
     if (hr != S_OK) {
         RELEASE_WITH_MSG("Could not enumerate audio endpoints", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
         goto ErrorExit;
     }
 
+    // get count of amount of devices populated by the enumerator
     hr = p_mmDeviceCollection->GetCount(&count);
     if (hr != S_OK) {
         RELEASE_WITH_MSG("Could not get device endpoint count from the device collection struct", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
@@ -114,6 +115,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     // print all the device information
     for (ULONG i = 0; i < count; i++) 
     {
+        // get item by index 
         hr = p_mmDeviceCollection->Item(i, &pDeviceEndpoint);
         if (hr != S_OK) {
             RELEASE_WITH_MSG("could not get device item from from collection", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
@@ -140,33 +142,31 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
 
         hr = pProps->GetValue(PKEY_Device_FriendlyName, &variantName);
         if (hr != S_OK) {
-            RELEASE_WITH_MSG(
-                "could not get props from audio device friendlyname",
-                pEnumerator,
-                p_mmDeviceCollection,
-                pDeviceEndpoint,
-                pProps,
-                endpointId
-            );
+            RELEASE_WITH_MSG("could not get props from audio device friendlyname", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
             goto ErrorExit;
         }
 
         // get value succeeds even if PKEY_Device_FriendlyName is not found
         // so in this case check if variantName.vt is set to VT_EMPTY
         // to see the information if the name came out empty
-        if (variantName.vt != VT_EMPTY) {
+        if (variantName.vt != VT_EMPTY /* 0 */) {
             printf("Found audio device endpoint info %d: \"%S\" (%S)\n", i, variantName.pwszVal, endpointId);
         }
         else {
-            printf("variant name was empty for %d, \"%S\" (%S)", i, variantName.pwszVal, endpointId);
+            printf("variant name was empty");
         }
+
+        // done with this device, free up some stuff
+        CoTaskMemFree(endpointId);
+        endpointId = 0;
+        PropVariantClear(&variantName);
+
+        SAFE_RELEASE(pProps);
+        SAFE_RELEASE(pDeviceEndpoint);
     }
 
-    CoTaskMemFree(endpointId);
     SAFE_RELEASE(pEnumerator);
     SAFE_RELEASE(p_mmDeviceCollection);
-    SAFE_RELEASE(pDeviceEndpoint);
-    SAFE_RELEASE(pProps);
 
 
     // Initialize global strings
