@@ -141,7 +141,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
         hr = pProps->GetValue(PKEY_Device_FriendlyName, &variantName);
         if (hr != S_OK) {
             RELEASE_WITH_MSG(
-                " could not get props from audio device friendlyname...whatever those bytes are I found from the internet LOL",
+                "could not get props from audio device friendlyname",
                 pEnumerator,
                 p_mmDeviceCollection,
                 pDeviceEndpoint,
