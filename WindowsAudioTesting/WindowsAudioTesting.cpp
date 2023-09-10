@@ -6,14 +6,10 @@
 #include "mmdeviceapi.h"
 #include <stdio.h>
 
-#define EXIT_ON_ERROR(hres)  \
-              if (hres != S_OK) { goto Exit; }
-
 // release pointers of any/unknown interface
 #define SAFE_RELEASE(punk)  \
               if ((punk) != NULL)  \
                 { (punk)->Release(); (punk) = NULL; }
-
 
 #define MAX_LOADSTRING 100
 
@@ -28,6 +24,15 @@ BOOL InitInstance(HINSTANCE, int);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK About(HWND, UINT, WPARAM, LPARAM);
 
+void RELEASE_WITH_MSG(const char* msg, IMMDeviceEnumerator *enumerator, IMMDeviceCollection *deviceCollection, IMMDevice *mmDevice, IPropertyStore *propertyStore, LPWSTR endpointId) {
+    OutputDebugStringA(msg);
+    CoTaskMemFree(endpointId);
+    SAFE_RELEASE(enumerator);
+    SAFE_RELEASE(deviceCollection);
+    SAFE_RELEASE(mmDevice);
+    SAFE_RELEASE(propertyStore);
+}
+
 int APIENTRY wWinMain(HINSTANCE hInstance,
                       HINSTANCE hPrevInstance,
                       LPWSTR lpCmdLine,
@@ -36,9 +41,11 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     (void)(hPrevInstance);
     (void)(lpCmdLine);
 
-    
+    HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_WINDOWSAUDIOTESTING));
+    MSG msg;
     HRESULT hr;
 
+    // start the audio device enumeration
     // Your COM dll requires you to be in Single - Threaded Apartment mode.
     // You need to call CoInitialize prior to using it.
     hr = CoInitialize(NULL);
@@ -47,24 +54,27 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
         return 1;
     }
     
+    // derive some IDs for the enumerator which needs permission to 
+    // make a new execution context
     const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
     const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 
-    
+    UINT count = 0;
+    // get collection count
+    LPWSTR endpointId = 0;
+    IMMDevice *pDeviceEndpoint = 0;
+    IPropertyStore *pProps = 0;
+    IMMDeviceCollection *p_mmDeviceCollection = 0;
     IMMDeviceEnumerator* pEnumerator = 0;
+
     hr = CoCreateInstance(
         CLSID_MMDeviceEnumerator, NULL,
         CLSCTX_ALL, IID_IMMDeviceEnumerator,
         // pointer to the device enumerator that we want to create
         (void**)&pEnumerator
     );
-    if (hr != S_OK) {
-        OutputDebugStringA("Could not CoCreateInstance");
-        SAFE_RELEASE(pEnumerator);
-        return 1;
-    }
 
-    IMMDeviceCollection* p_mmDeviceCollection = 0;
+    RELEASE_WITH_MSG("Could not CoCreateInstance", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
      
     hr = pEnumerator->EnumAudioEndpoints(
         eAll,
@@ -72,24 +82,52 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
         &p_mmDeviceCollection
     );
     if (hr != S_OK) {
-        OutputDebugStringA("Could not enumerate audio endpoints");
-        SAFE_RELEASE(pEnumerator);
-        SAFE_RELEASE(p_mmDeviceCollection);
-        return 1;
+        RELEASE_WITH_MSG("Could not enumerate audio endpoints", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
+        goto ErrorExit;
     }
 
-    // get collection count
-    UINT count = 0;
-    LPWSTR endpointId = 0;
-
     hr = p_mmDeviceCollection->GetCount(&count);
-    
+    if (hr != S_OK) {
+        RELEASE_WITH_MSG("Could not get device endpoint count from the device collection struct", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
+        goto ErrorExit;
+    }
+
+
     // print all the device information
+    for (ULONG i = 0; i < count; i++) 
+    {
+        hr = p_mmDeviceCollection->Item(i, &pDeviceEndpoint);
+        if (hr != S_OK) {
+            RELEASE_WITH_MSG("could not get device item from from collection", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
+            goto ErrorExit;
+        }
 
-    // IMMDevice* pp_mmDevice = 0;
+        hr = pDeviceEndpoint->GetId(&endpointId);
+        if (hr != S_OK) {
+            RELEASE_WITH_MSG(" could not get endpoint id from device endpoint", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
+            goto ErrorExit;
+        }
 
+        hr = pDeviceEndpoint->OpenPropertyStore(STGM_READ, &pProps);
+        if (hr != S_OK) {
+            RELEASE_WITH_MSG("could not open property store", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
+            goto ErrorExit;
+        }
+
+        PROPVARIANT variantName;
+        // initi container for prop value
+        PropVariantInit(&variantName);
+
+        // get endpoints friendly-name prop
+
+    }
+
+    CoTaskMemFree(endpointId);
     SAFE_RELEASE(pEnumerator);
     SAFE_RELEASE(p_mmDeviceCollection);
+    SAFE_RELEASE(pDeviceEndpoint);
+    SAFE_RELEASE(pProps);
+
 
     // Initialize global strings
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
@@ -101,10 +139,6 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     {
         return FALSE;
     }
-
-    HACCEL hAccelTable = LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_WINDOWSAUDIOTESTING));
-
-    MSG msg;
 
     // Main message loop:
     while (GetMessage(&msg, nullptr, 0, 0))
@@ -118,11 +152,8 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
 
     return (int)msg.wParam;
 
-Exit: 
+ErrorExit: 
     printf("[ERROR]: hresult was code %d", hr);
-    CoTaskMemFree(endpointId);
-    SAFE_RELEASE(pEnumerator);
-    SAFE_RELEASE(p_mmDeviceCollection);
     return 1;
 }
 
