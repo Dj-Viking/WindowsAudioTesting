@@ -4,10 +4,15 @@
 #include "framework.h"
 #include "WindowsAudioTesting.h"
 #include "mmdeviceapi.h"
+#include <stdio.h>
 
+#define EXIT_ON_ERROR(hres)  \
+              if (hres != S_OK) { goto Exit; }
+
+// release pointers of any/unknown interface
 #define SAFE_RELEASE(punk)  \
-	if ((punk) != NULL)  \
-{ (punk)->Release(); (punk) = NULL; }
+              if ((punk) != NULL)  \
+                { (punk)->Release(); (punk) = NULL; }
 
 
 #define MAX_LOADSTRING 100
@@ -31,40 +36,60 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     (void)(hPrevInstance);
     (void)(lpCmdLine);
 
+    
+    HRESULT hr;
+
     // Your COM dll requires you to be in Single - Threaded Apartment mode.
     // You need to call CoInitialize prior to using it.
-    HRESULT hr = 0;
-
     hr = CoInitialize(NULL);
     if (hr != S_OK) {
         OutputDebugStringA("Could not coInitialize");
         return 1;
     }
-
-    IMMDeviceEnumerator *pEnumerator = 0;
-    IMMDeviceCollection *p_mmDeviceCollection = 0;
-
+    
     const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
     const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 
+    
+    IMMDeviceEnumerator* pEnumerator = 0;
     hr = CoCreateInstance(
         CLSID_MMDeviceEnumerator, NULL,
         CLSCTX_ALL, IID_IMMDeviceEnumerator,
         // pointer to the device enumerator that we want to create
         (void**)&pEnumerator
     );
-
     if (hr != S_OK) {
+        OutputDebugStringA("Could not CoCreateInstance");
         SAFE_RELEASE(pEnumerator);
         return 1;
     }
 
-    IMMDevice *pp_mmDevice = 0;
-
-    pEnumerator->EnumAudioEndpoints(
+    IMMDeviceCollection* p_mmDeviceCollection = 0;
+     
+    hr = pEnumerator->EnumAudioEndpoints(
         eAll,
         DEVICE_STATE_ACTIVE,
-        &p_mmDeviceCollection);
+        &p_mmDeviceCollection
+    );
+    if (hr != S_OK) {
+        OutputDebugStringA("Could not enumerate audio endpoints");
+        SAFE_RELEASE(pEnumerator);
+        SAFE_RELEASE(p_mmDeviceCollection);
+        return 1;
+    }
+
+    // get collection count
+    UINT count = 0;
+    LPWSTR endpointId = 0;
+
+    hr = p_mmDeviceCollection->GetCount(&count);
+    
+    // print all the device information
+
+    // IMMDevice* pp_mmDevice = 0;
+
+    SAFE_RELEASE(pEnumerator);
+    SAFE_RELEASE(p_mmDeviceCollection);
 
     // Initialize global strings
     LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
@@ -92,6 +117,13 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     }
 
     return (int)msg.wParam;
+
+Exit: 
+    printf("[ERROR]: hresult was code %d", hr);
+    CoTaskMemFree(endpointId);
+    SAFE_RELEASE(pEnumerator);
+    SAFE_RELEASE(p_mmDeviceCollection);
+    return 1;
 }
 
 //
@@ -199,7 +231,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 // Message handler for about box.
 INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    UNREFERENCED_PARAMETER(lParam);
+    (void)(lParam);
     switch (message)
     {
     case WM_INITDIALOG:
