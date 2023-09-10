@@ -44,7 +44,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
     IMMDeviceEnumerator *pEnumerator = 0;
     IMMDeviceCollection *p_mmDeviceCollection = 0;
 
-    const CLSID CLSID_MMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
+    const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
     const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 
     hr = CoCreateInstance(
