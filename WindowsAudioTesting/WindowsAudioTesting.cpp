@@ -5,6 +5,22 @@
 #include "WindowsAudioTesting.h"
 #include "mmdeviceapi.h"
 #include <stdio.h>
+#include "wtypes.h"
+#include "Functiondiscoverykeys_devpkey.h"
+
+int print_log(const char* format, ...)
+{
+    static char s_printf_buf[1024];
+    va_list args;
+    va_start(args, format);
+    _vsnprintf_s(s_printf_buf, sizeof(s_printf_buf), format, args);
+    va_end(args);
+    OutputDebugStringA(s_printf_buf);
+    return 0;
+}
+
+#define printf(format, ...) \
+        print_log(format, __VA_ARGS__)
 
 // release pointers of any/unknown interface
 #define SAFE_RELEASE(punk)  \
@@ -73,8 +89,10 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
         // pointer to the device enumerator that we want to create
         (void**)&pEnumerator
     );
-
-    RELEASE_WITH_MSG("Could not CoCreateInstance", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
+    if (hr != S_OK) {
+        RELEASE_WITH_MSG("Could not CoCreateInstance", pEnumerator, p_mmDeviceCollection, pDeviceEndpoint, pProps, endpointId);
+        goto ErrorExit;
+    }
      
     hr = pEnumerator->EnumAudioEndpoints(
         eAll,
@@ -114,12 +132,34 @@ int APIENTRY wWinMain(HINSTANCE hInstance,
             goto ErrorExit;
         }
 
-        PROPVARIANT variantName;
+        PROPVARIANT variantName = { 0 };
         // initi container for prop value
         PropVariantInit(&variantName);
 
         // get endpoints friendly-name prop
 
+        hr = pProps->GetValue(PKEY_Device_FriendlyName, &variantName);
+        if (hr != S_OK) {
+            RELEASE_WITH_MSG(
+                " could not get props from audio device friendlyname...whatever those bytes are I found from the internet LOL",
+                pEnumerator,
+                p_mmDeviceCollection,
+                pDeviceEndpoint,
+                pProps,
+                endpointId
+            );
+            goto ErrorExit;
+        }
+
+        // get value succeeds even if PKEY_Device_FriendlyName is not found
+        // so in this case check if variantName.vt is set to VT_EMPTY
+        // to see the information if the name came out empty
+        if (variantName.vt != VT_EMPTY) {
+            printf("Found audio device endpoint info %d: \"%S\" (%S)\n", i, variantName.pwszVal, endpointId);
+        }
+        else {
+            printf("variant name was empty for %d, \"%S\" (%S)", i, variantName.pwszVal, endpointId);
+        }
     }
 
     CoTaskMemFree(endpointId);
